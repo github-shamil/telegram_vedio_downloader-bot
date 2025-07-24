@@ -13,17 +13,17 @@ from telegram import Update, InputFile
 import yt_dlp
 import tempfile
 
-# =============== Telegram Bot Handlers ===============
+# ================= TELEGRAM BOT COMMANDS =================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Welcome to the Video Downloader Bot!\n"
-        "👉 Send a YouTube, Terabox, or DiskWala link to get the video as a manual Telegram download."
+        "👉 Send a YouTube, Terabox, or DiskWala link to get the video as a Telegram download."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
-    print("🔹 Received:", url)
+    print(f"🔗 Received URL: {url}")
 
     if "youtube.com" in url or "youtu.be" in url:
         await download_youtube(update, context, url)
@@ -35,19 +35,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📥 DiskWala support coming soon.")
 
     else:
-        await update.message.reply_text("❌ Unsupported link.")
+        await update.message.reply_text("❌ Unsupported link. Only YouTube, Terabox, and DiskWala are allowed.")
+
+# ================= YOUTUBE DOWNLOAD HANDLER =================
 
 async def download_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str):
-    await update.message.reply_text("📥 Downloading YouTube video...")
+    await update.message.reply_text("⏳ Downloading YouTube video... Please wait...")
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             ydl_opts = {
                 'format': 'best[ext=mp4]/best',
-                'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
+                'outtmpl': os.path.join(tmpdir, '%(title).80s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
                 'no_warnings': True,
+                'cookies': 'cookies.txt',  # ✅ Use YouTube Premium/private cookies
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -56,46 +59,47 @@ async def download_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE, u
                 file_name = os.path.basename(file_path)
                 file_size = os.path.getsize(file_path)
 
-                print(f"✅ Downloaded: {file_name} ({file_size / (1024*1024):.2f} MB)")
+                print(f"✅ Downloaded: {file_name} ({file_size / 1024 / 1024:.2f} MB)")
 
                 with open(file_path, 'rb') as f:
                     await update.message.reply_document(
                         document=InputFile(f, filename=file_name),
-                        caption=f"{info.get('title', 'Video')} ({round(file_size / (1024*1024), 1)} MB)"
+                        caption=f"📽️ {info.get('title', 'Video')} ({file_size // (1024 * 1024)} MB)"
                     )
 
     except Exception as e:
         print("❌ Error:", str(e))
-        await update.message.reply_text(f"❌ Failed to download video.\nError: {str(e)}")
+        await update.message.reply_text(f"❌ Failed to download video:\n`{str(e)}`", parse_mode="Markdown")
 
-# =============== Telegram Bot Setup ===============
+# ================= TELEGRAM BOT SETUP =================
 
 async def run_telegram_bot():
     token = "7823731827:AAFoCU1etlCutbNiASDOCQMtHRE2qJW9eKE"
     app = ApplicationBuilder().token(token).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("✅ Telegram bot polling started.")
+    print("🚀 Telegram bot started and polling updates.")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
+    await app.updater.idle()
 
-# =============== Flask App ===============
+# ================= FLASK SETUP FOR RENDER =================
 
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def index():
-    return "🤖 Telegram Video Downloader Bot is LIVE on Render!"
+    return "✅ Telegram YouTube Downloader Bot is LIVE!"
 
-# =============== Launch Everything ===============
+# ================= RUN BOTH (TELEGRAM + FLASK) =================
 
 def start_bot_thread():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.create_task(run_telegram_bot())
-    loop.run_forever()
+    loop.run_until_complete(run_telegram_bot())
 
 if __name__ == '__main__':
     threading.Thread(target=start_bot_thread, daemon=True).start()
